@@ -26,7 +26,7 @@ constraints (vision, Electron debug-port, zero-vision).
 |---|---|---|
 | **Calculator** — compute an arithmetic expression, read result via clipboard | **hotkeys** (Layer 1 — zero LLM, zero vision) | **zero-vision** (`vision_calls == 0`) |
 | **Electron app** — launch the bundled minimal Electron app (`S10code/electron_app/`), type content into `#editor`, read back and verify, persist to `electron_out.txt` | **electron** (CDP over `--remote-debugging-port=9222`) | **Electron debug-port** |
-| **Canvas** — a label-less HTML canvas (`S10code/vision_canvas/target.html`) opened in a browser app window; the agent set-of-marks-locates the red circle and clicks it (turns green/HIT) | **vision** (Layer 5 / last resort — screenshot + set-of-marks vision) | **vision (≥1 vision call)** |
+| **Canvas** — a label-less HTML canvas (`S10code/vision_canvas/target.html`) opened in a browser app window; the agent set-of-marks-locates the red circle and clicks it (turns green/HIT) | **vision** (last resort — screenshot + set-of-marks) | **vision (≥1 vision call)** |
 
 ### Constraint coverage (explicit)
 
@@ -103,6 +103,49 @@ The skill is added as **capability is data** — no changes to `flow.py`:
    `ComputerUseSkill.run()`. The returned `AgentResult` is identical in shape
    to what the orchestrator already receives from `browser` and
    `sandbox_executor`. `flow.py` is untouched and byte-identical to Session 9.
+
+---
+
+## Challenges & Engineering Decisions
+
+The cascade philosophy held throughout: each task settles at the cheapest layer
+that actually works **on this OS**, and where a platform reality blocked a
+layer, we adapted the *approach* rather than the discipline. The notable ones:
+
+1. **VS Code's renderer isn't exposed to CDP.** The Electron task originally
+   targeted VS Code via `--remote-debugging-port`. On modern VS Code the port
+   opens but `/json/list` returns **zero page targets** — `connect_over_cdp`
+   succeeds with nothing to drive. Rather than fight a version-specific quirk,
+   we ship a **bundled minimal Electron app** (`electron_app/`) we control,
+   which reliably exposes its renderer and demonstrates the identical
+   debug-port + page-tool mechanism.
+2. **`pyautogui` can't draw in Windows 11 Paint.** The vision task first drew
+   in MS Paint, but synthetic drags leave no stroke on the WinUI Paint canvas.
+   We pivoted to a **self-contained label-less HTML canvas**
+   (`vision_canvas/target.html`) where clicks register reliably and success is
+   visually verifiable (the target turns green / "HIT").
+3. **VLMs are imprecise at raw pixel coordinates.** Asked for exact click
+   coordinates, the vision model was ~200+px off and missed repeatedly. Fixed
+   with **set-of-marks**: overlay a numbered grid (`controllers.annotate_grid`),
+   have the model return a **mark number** (coarse spatial reasoning it does
+   well), and map the mark back to exact pixels.
+4. **Small models won't reliably emit JSON-only.** The model returned prose and
+   malformed pseudo-tool-call blocks instead of clean actions. Both drivers now
+   force **structured output** via the gateway's JSON-schema mode, so each turn
+   yields a single validated action object.
+5. **Windows Calculator is single-instance.** Relaunching `calc.exe` refocuses
+   a window with stale state, and `pywinauto` errored on **multiple matching
+   "Calculator" windows**. Fixed by pressing `Esc` to clear before typing and
+   by picking the first *visible* matching window instead of erroring on
+   ambiguity.
+6. **Reliable launches.** Electron's binary download can be skipped by `npm`
+   when it reports "up to date" (fallback documented in RUN.md), and GUI
+   subprocesses are launched with detached stdio so the runner never hangs
+   waiting on an inherited console pipe.
+
+Each fix is reflected in the trajectory evidence (e.g. the canvas
+`step_NN_marked.png` files show the set-of-marks grid the model actually chose
+from).
 
 ---
 
@@ -192,6 +235,10 @@ S10code/
     recorder.py       # TrajectoryRecorder + start_recording
   prompts/
     computer_use.md   # skill prompt (cascade contract + driver system text)
+  electron_app/       # bundled minimal Electron app (debug-port task)
+    main.js, index.html, package.json   # run `npm install` once; node_modules gitignored
+  vision_canvas/
+    target.html       # label-less HTML canvas target (set-of-marks vision task)
   run_task.py         # thin single-task runner (demo/recording)
   agent_config.yaml   # +computer_use: block
   skills.py           # +computer_use dispatch branch
