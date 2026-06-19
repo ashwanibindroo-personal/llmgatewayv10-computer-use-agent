@@ -50,7 +50,7 @@ A cost ladder — cheapest viable layer first, escalate only on insufficiency:
 | **ax** | UIAutomation: find control by name, `Invoke()` directly | No LLM, no vision | `pywinauto` (uia backend) |
 | **ax_llm** | AX tree serialised → numbered legend → `/v1/chat`; LLM picks one action per turn | Text LLM, no image | `pywinauto` + `V9Client.chat` |
 | **electron** | Launch app with `--remote-debugging-port`, `connect_over_cdp`, drive renderer DOM | No vision | `playwright` |
-| **vision** | Screenshot → `/v1/vision` (coordinate-based); act on returned pixel coords | Vision LLM (expensive — last resort) | `mss`/`Pillow` + `V9Client.vision` |
+| **vision** | Screenshot → overlay numbered mark grid (set-of-marks) → `/v1/vision` returns a mark number → click that mark | Vision LLM (expensive — last resort) | `mss`/`Pillow` + `V9Client.vision` |
 
 **Escalation rule:** stop at the first layer that completes the goal. Escalate
 when the current layer's locate/act step fails or returns an empty result.
@@ -63,7 +63,7 @@ Every escalation decision is logged as a human-readable string in
 |---|---|---|
 | **Calculator** | hotkeys | Fixed arithmetic expression → deterministic keystrokes; clipboard returns the result. If clipboard is empty the run fails cleanly. An `ax_llm` fallback is a documented extension point (not implemented, since the hotkeys + clipboard path is deterministic). Vision is never needed. |
 | **Electron app** | electron | A bundled minimal Electron app (`S10code/electron_app/`) launched with `--remote-debugging-port=9222`; Playwright `connect_over_cdp` drives the renderer via the page tool — types into `#editor`, reads back and verifies, then persists to `electron_out.txt`. (Modern VS Code does not expose its renderer to CDP — `/json/list` returns no page targets — so we ship a small Electron app we control, which reliably exposes its renderer page. This still demonstrates the exact required mechanism.) |
-| **MS Paint** | vision | The canvas has no accessibility labels; a raw screenshot is sent to the vision LLM, which returns pixel coordinates for the agent to act on (coordinate-based vision, not set-of-marks annotation). |
+| **Canvas** | vision | A label-less HTML canvas (`vision_canvas/target.html`) opened in a browser app window; the `VisionDriver` overlays a numbered set-of-marks grid, the model returns a mark number, and the agent clicks it — robust to VLM coordinate imprecision. |
 
 ## 4. The trajectory recorder (`recorder.py`)
 
@@ -78,8 +78,8 @@ rec.stop(result=...)                # flushes trajectory.json
 
 Each run directory contains:
 - `step_NN.json` — per-step record.
-- `step_NN_screen.png` — raw screenshot (vision steps only; the current `VisionDriver` uses coordinate-based vision and does not produce set-of-marks annotation).
-- `step_NN_marked.png` — written only when a marked image is supplied to `rec.step()`; the recorder supports it, but the current `VisionDriver` does not emit one.
+- `step_NN_screen.png` — raw screenshot (written every vision turn).
+- `step_NN_marked.png` — numbered set-of-marks grid overlay (written every vision turn); the `VisionDriver` always emits both.
 - `trajectory.json` — ordered step log, `layer_counts`, `vision_calls` (the
   zero-vision assertion field), `notes` (escalation log), and final `result`.
 

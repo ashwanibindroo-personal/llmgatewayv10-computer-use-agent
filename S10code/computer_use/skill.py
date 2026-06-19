@@ -7,7 +7,7 @@ Per-task cascade (cheapest viable layer first; escalate on insufficiency):
     read returns empty the run fails cleanly (ax_llm is a documented
     extension point, not implemented).
   * electron   → bundled Electron app via CDP 'page' layer over the debug port.
-  * paint      → forced vision layer (canvas has no AX labels).
+  * canvas     → forced vision on a label-less HTML canvas (click a target).
 """
 from __future__ import annotations
 
@@ -37,6 +37,35 @@ def _wait_for_port(host: str, port: int, timeout: float = 30.0) -> bool:
         except OSError:
             time.sleep(0.5)
     return False
+
+
+def _find_browser() -> str | None:
+    """Resolve a Chromium-family browser (Edge or Chrome) to open the vision
+    canvas in a clean app-mode window. Returns None if none is found, in which
+    case the caller falls back to the default browser via webbrowser.open."""
+    import os
+    import shutil
+
+    for name in ("msedge", "chrome"):
+        p = shutil.which(name)
+        if p:
+            return p
+    pf = os.environ.get("ProgramFiles", r"C:\Program Files")
+    pf86 = os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")
+    local = os.environ.get("LOCALAPPDATA", "")
+    candidates = [
+        Path(pf86) / "Microsoft" / "Edge" / "Application" / "msedge.exe",
+        Path(pf) / "Microsoft" / "Edge" / "Application" / "msedge.exe",
+        Path(pf) / "Google" / "Chrome" / "Application" / "chrome.exe",
+        Path(pf86) / "Google" / "Chrome" / "Application" / "chrome.exe",
+    ]
+    if local:
+        candidates.append(
+            Path(local) / "Google" / "Chrome" / "Application" / "chrome.exe")
+    for c in candidates:
+        if c.is_file():
+            return str(c)
+    return None
 
 
 async def _await_renderer_page(browser, timeout: float = 20.0):
@@ -86,8 +115,8 @@ class ComputerUseSkill:
                 return self._calculator(node, rec, t0)
             if task == "electron":
                 return await self._electron(node, rec, t0)
-            if task == "paint":
-                return await self._paint(node, rec, t0)
+            if task == "canvas":
+                return await self._canvas(node, rec, t0)
             rec.stop(result=None)
             return self._err(task, "interaction_failed",
                              f"unknown task: {task!r}", time.time() - t0)
@@ -210,26 +239,51 @@ class ComputerUseSkill:
                             if ok else None,
                             "" if ok else "renderer value mismatch")
 
-    # ── paint: forced vision layer (last resort) ────────────────────────────
-    async def _paint(self, node, rec, t0) -> AgentResult:
+    # ── canvas: forced vision on a label-less HTML canvas ────────────────────
+    async def _canvas(self, node, rec, t0) -> AgentResult:
         res = await self._run_vision(node.metadata.get("goal",
-                "Open a blank canvas in MS Paint and draw a circle in the centre"),
+                "A red circle is painted on the white canvas. Click its centre. "
+                "When it turns green and shows 'HIT', the goal is complete — "
+                "then return the done action."),
                 rec)
         rec.stop(result=res.result)
         if res.success:
-            return self._pack("paint", "vision", rec, res.result,
+            return self._pack("canvas", "vision", rec, res.result,
                               time.time() - t0, turns=res.turns)
-        return self._err("paint", "interaction_failed", res.note,
-                         time.time() - t0, path="vision")
+        return self._err("canvas", "interaction_failed", res.note,
+                         time.time() - t0, path="vision", vision_calls=rec.vision_calls)
 
     async def _run_vision(self, goal: str, rec) -> DriverResult:
-        """Live: open MS Paint, then drive the label-less canvas with the
-        vision driver (raw screenshot + coordinate-based vision; no set-of-marks)."""
+        """Live: open a label-less HTML canvas in a browser app-mode window,
+        then drive it with the vision driver (screenshot + coordinate-based
+        vision). The target is painted pixels with NO DOM/AX node, so the agent
+        must locate it visually and click the on-screen coordinate — Layer 3."""
         import subprocess
-        subprocess.Popen(["mspaint.exe"])
-        time.sleep(2.0)
-        cfg = DriverConfig(goal=goal, max_steps=8, recorder=rec)
-        return await VisionDriver(self._desktop(), self._client(), cfg).run()
+
+        html = Path(__file__).resolve().parent.parent / "vision_canvas" / "target.html"
+        url = html.as_uri()
+        proc = None
+        browser_exe = _find_browser()
+        if browser_exe:
+            proc = subprocess.Popen(
+                [browser_exe, f"--app={url}", "--window-size=1100,820",
+                 "--window-position=80,60", "--new-window"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                stdin=subprocess.DEVNULL,
+                creationflags=getattr(subprocess, "DETACHED_PROCESS", 0))
+        else:
+            import webbrowser
+            webbrowser.open(url)
+        time.sleep(3.5)
+        cfg = DriverConfig(goal=goal, max_steps=6, recorder=rec)
+        try:
+            return await VisionDriver(self._desktop(), self._client(), cfg).run()
+        finally:
+            if proc is not None:
+                try:
+                    proc.terminate()
+                except Exception:                          # noqa: BLE001
+                    pass
 
     # ── packers ─────────────────────────────────────────────────────────────
     def _pack(self, task, path, rec, result, elapsed, *, turns=0) -> AgentResult:
@@ -242,12 +296,14 @@ class ComputerUseSkill:
                            output=out.model_dump(), elapsed_s=elapsed)
 
     def _err(self, task, code, msg, elapsed, *, rec=None,
-             path: str = "hotkeys") -> AgentResult:
+             path: str = "hotkeys", vision_calls: int = 0) -> AgentResult:
         if rec is not None:
             rec.stop(result=None)
+        # Prefer an explicitly-passed count (callers that already stopped the
+        # recorder), else read it off the recorder when one was handed in.
+        vc = vision_calls or (getattr(rec, "vision_calls", 0) if rec else 0)
         out = ComputerUseOutput(task=task or "unknown", path=path,
-                                vision_calls=getattr(rec, "vision_calls", 0)
-                                if rec else 0)
+                                vision_calls=vc)
         return AgentResult(success=False, agent_name=self.NAME,
                            output=out.model_dump(), error=msg, error_code=code,
                            elapsed_s=elapsed)

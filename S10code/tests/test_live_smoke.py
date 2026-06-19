@@ -32,8 +32,8 @@ def test_electron_live():
     assert res.output["path"] == "electron"
 
 
-def test_paint_live_vision():
-    res = _run(build_node("paint"))
+def test_canvas_live_vision():
+    res = _run(build_node("canvas"))
     assert res.success, res.error
     assert res.output["path"] == "vision"
     assert res.output["vision_calls"] >= 1

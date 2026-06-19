@@ -31,7 +31,7 @@ cd "C:\The School Of AI\Session 10 - Computer Use Agent\llm_gatewayV9"
 uv run main.py
 ```
 
-Expect `Uvicorn running on http://0.0.0.0:8109`. Only the `paint` task calls
+Expect `Uvicorn running on http://0.0.0.0:8109`. Only the `canvas` task calls
 this gateway (for vision requests). The `calculator` and `electron` tasks do
 not call the gateway at all (hotkeys/clipboard and CDP only, respectively).
 
@@ -89,27 +89,26 @@ What happens:
 - Trajectory written to:
   `state\sessions\direct\computer_use\electron_1\`
 
-## Step 5 — Run the MS Paint task (Terminal 2, gateway must be running)
+## Step 5 — Run the Canvas (vision / set-of-marks) task (Terminal 2, gateway must be running)
 
 ```powershell
-uv run python run_task.py paint
+uv run python run_task.py canvas
 ```
 
 What happens:
-- MS Paint opens (`mspaint.exe`).
-- The vision driver takes a full-screen screenshot each turn, sends it to
-  the gateway `/v1/vision`, and acts on the returned pixel coordinates
-  (click or drag). The default goal is `"Open a blank canvas in MS Paint and
-  draw a circle in the centre"`.
+- A browser app window opens the bundled HTML canvas (`S10code/vision_canvas/target.html`)
+  in Edge or Chrome via `--app=file://...` (falls back to the default browser). The page
+  shows a red circle painted on a `<canvas>` element — pure pixels, no DOM/accessibility nodes.
+- Each turn the vision driver takes a screenshot, overlays a numbered yellow mark grid
+  (`controllers.annotate_grid()`), and sends the annotated image to the gateway `/v1/vision`.
+  The model returns a mark number; the agent clicks that mark's pixel coordinate.
+- The model picks the mark centred on the red circle, clicks it; the circle turns green
+  and shows "HIT"; the model returns the done action.
 - `vision_calls > 0` confirms the vision constraint.
-- Screenshots saved as `step_NN_screen.png` in the trajectory directory.
+- Both `step_NN_screen.png` (raw) and `step_NN_marked.png` (numbered grid overlay) are
+  written every vision turn.
 - Trajectory written to:
-  `state\sessions\direct\computer_use\paint_1\`
-
-A custom goal can be set with `--goal`:
-```powershell
-uv run python run_task.py paint --goal "Draw a red square in the top-left corner"
-```
+  `state\sessions\direct\computer_use\canvas_1\`
 
 ## Step 6 — Inspect the trajectory
 
@@ -162,7 +161,7 @@ byte-identical to Session 9.
 
 | Symptom | Fix |
 |---|---|
-| Gateway not running — paint fails with `ConnectionRefusedError` | Start Terminal 1 (`uv run main.py`) before running paint |
+| Gateway not running — canvas fails with `ConnectionRefusedError` | Start Terminal 1 (`uv run main.py`) before running canvas |
 | `ANTHROPIC_API_KEY` not found | Add it to `llm_gatewayV9\.env` |
 | Electron not found / CDP port didn't open | Run `npm install` in `S10code/electron_app/`; requires Node.js + npm |
 | Electron connection refused on CDP port | Electron took >6 s to start; raise `time.sleep(6.0)` in `skill.py` `_run_electron` |

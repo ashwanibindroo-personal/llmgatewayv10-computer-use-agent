@@ -24,13 +24,13 @@ def test_calculator_uses_hotkeys_zero_vision(tmp_path, monkeypatch):
     assert res.output["vision_calls"] == 0
 
 
-def test_paint_uses_vision_path(tmp_path, monkeypatch):
+def test_canvas_uses_vision_path(tmp_path, monkeypatch):
     sk = _skill(tmp_path)
     async def fake_vision(goal, rec):
         rec.step("vision", "click", "target", vision_called=True)
-        return DriverResult(True, 2, "drawn")
+        return DriverResult(True, 2, "hit")
     monkeypatch.setattr(sk, "_run_vision", fake_vision)
-    node = NodeSpec(skill="computer_use", metadata={"task": "paint"})
+    node = NodeSpec(skill="computer_use", metadata={"task": "canvas"})
     res = asyncio.run(sk.run(node))
     assert res.success and res.output["path"] == "vision"
     assert res.output["vision_calls"] == 1

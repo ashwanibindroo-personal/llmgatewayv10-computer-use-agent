@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>S10 Vision Canvas Target</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #fff;
+                 font-family: system-ui, sans-serif; overflow: hidden; }
+    #hud { position: fixed; top: 12px; left: 16px; font-size: 20px;
+           font-weight: 700; color: #333; }
+    #status { position: fixed; top: 44px; left: 16px; font-size: 18px;
+              color: #888; }
+    canvas { display: block; }
+  </style>
+</head>
+<body>
+  <div id="hud">Click the RED circle</div>
+  <div id="status">target: not yet hit</div>
+  <canvas id="c"></canvas>
+  <script>
+    // A label-less HTML canvas: the target is PAINTED pixels with no DOM/AX
+    // node, so the agent must locate it by vision (screenshot) and click the
+    // on-screen pixel — there is nothing in the accessibility tree to query.
+    const canvas = document.getElementById('c');
+    const ctx = canvas.getContext('2d');
+    const status = document.getElementById('status');
+    let target = { x: 0, y: 0, r: 110, hit: false };
+
+    function layout() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      // Fixed, prominent position (slightly right of centre, vertically centred).
+      target.x = Math.round(canvas.width * 0.62);
+      target.y = Math.round(canvas.height * 0.55);
+      draw();
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.beginPath();
+      ctx.arc(target.x, target.y, target.r, 0, Math.PI * 2);
+      ctx.fillStyle = target.hit ? '#1aa64b' : '#e11d1d';
+      ctx.fill();
+      if (target.hit) {
+        ctx.fillStyle = '#0a7a37';
+        ctx.font = 'bold 40px system-ui';
+        ctx.fillText('HIT ✓', target.x - 48, target.y - 70);
+      }
+    }
+
+    canvas.addEventListener('click', (e) => {
+      const dx = e.clientX - target.x, dy = e.clientY - target.y;
+      if (Math.hypot(dx, dy) <= target.r) {
+        target.hit = true;
+        status.textContent = 'target: HIT';
+        document.title = 'HIT';
+        draw();
+      }
+    });
+
+    window.addEventListener('resize', layout);
+    layout();
+  </script>
+</body>
+</html>

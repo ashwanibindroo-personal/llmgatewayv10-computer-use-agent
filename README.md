@@ -26,13 +26,15 @@ constraints (vision, Electron debug-port, zero-vision).
 |---|---|---|
 | **Calculator** — compute an arithmetic expression, read result via clipboard | **hotkeys** (Layer 1 — zero LLM, zero vision) | **zero-vision** (`vision_calls == 0`) |
 | **Electron app** — launch the bundled minimal Electron app (`S10code/electron_app/`), type content into `#editor`, read back and verify, persist to `electron_out.txt` | **electron** (CDP over `--remote-debugging-port=9222`) | **Electron debug-port** |
-| **MS Paint** — open a blank canvas and draw a circle in the centre | **vision** (Layer 5 / last resort — screenshot + coordinate-based vision) | **vision (≥1 vision call)** |
+| **Canvas** — a label-less HTML canvas (`S10code/vision_canvas/target.html`) opened in a browser app window; the agent set-of-marks-locates the red circle and clicks it (turns green/HIT) | **vision** (Layer 5 / last resort — screenshot + set-of-marks vision) | **vision (≥1 vision call)** |
 
 ### Constraint coverage (explicit)
 
-- **≥1 vision call** — MS Paint task; the `VisionDriver` sends a raw
-  screenshot and asks for pixel coordinates per turn (coordinate-based vision,
-  not set-of-marks annotation); `trajectory.json` records `vision_calls > 0`.
+- **≥1 vision call** — Canvas task; each turn the `VisionDriver` takes a
+  screenshot, overlays a numbered yellow mark grid via `controllers.annotate_grid()`
+  (set-of-marks), sends the annotated image to `/v1/vision`, the model returns a
+  mark number (not raw pixels), and the agent clicks that mark's pixel coordinate;
+  `trajectory.json` records `vision_calls > 0`.
 - **≥1 Electron debug-port** — Electron app task; a bundled minimal Electron
   app shipped in `S10code/electron_app/` is launched with
   `--remote-debugging-port=9222`; Playwright `connect_over_cdp` drives the
@@ -54,7 +56,7 @@ Layer 1 — hotkeys            pyautogui keystrokes + clipboard read
 Layer 2a — ax                pywinauto UIAutomation Invoke (no LLM)
 Layer 2b — ax_llm            AX tree serialised → numbered legend → V9Client.chat
 Layer 3  — electron          connect_over_cdp → renderer DOM (Playwright)
-Layer 4  — vision            mss screenshot → V9Client.vision (coordinate-based)
+Layer 4  — vision            mss screenshot → V9Client.vision (set-of-marks: numbered grid → mark number)
 ```
 
 **Escalation rule:** stop at the first layer that completes the goal. Escalate
@@ -109,7 +111,7 @@ The skill is added as **capability is data** — no changes to `flow.py`:
 ### Option A — direct task runner (recommended for demo/recording)
 
 ```powershell
-# Terminal 1: boot the gateway (needed for the paint task only)
+# Terminal 1: boot the gateway (needed for the canvas task only)
 cd "C:\The School Of AI\Session 10 - Computer Use Agent\llm_gatewayV9"
 uv run main.py
 
@@ -117,7 +119,7 @@ uv run main.py
 cd "C:\The School Of AI\Session 10 - Computer Use Agent\S10code"
 uv run python run_task.py calculator --expr "12.5*8+100="
 uv run python run_task.py electron --content "Hello from the computer-use agent."
-uv run python run_task.py paint
+uv run python run_task.py canvas
 ```
 
 > **Electron app prerequisite:** before running the `electron` task for the
@@ -165,12 +167,11 @@ S10code/state/sessions/direct/computer_use/calculator_1/
   step_02.json
   trajectory.json
 
-S10code/state/sessions/direct/computer_use/paint_1/
+S10code/state/sessions/direct/computer_use/canvas_1/
   step_01.json
-  step_01_screen.png          # raw screenshot (coordinate-based vision; no set-of-marks)
+  step_01_screen.png          # raw screenshot (every vision turn)
+  step_01_marked.png          # numbered set-of-marks grid overlay (every vision turn)
   trajectory.json
-  # step_NN_marked.png is written only when a marked image is supplied
-  # (the recorder supports it; the current VisionDriver does not emit one)
 ```
 
 `trajectory.json` is the primary submission artifact: it contains the

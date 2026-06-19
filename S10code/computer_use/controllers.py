@@ -67,6 +67,39 @@ def parse_action(text: str) -> dict:
     return {}
 
 
+def annotate_grid(png_bytes: bytes, step: int = 150, margin: int = 60):
+    """Overlay a numbered point grid on a screenshot for set-of-marks vision.
+
+    VLMs are imprecise at free-form pixel coordinates but reliably pick a
+    discrete label, so the vision layer sends this annotated image and the
+    model returns a mark number; we map it back to exact pixels. Returns
+    (annotated_png_bytes, {mark_id: (x, y)})."""
+    import io
+
+    from PIL import Image, ImageDraw, ImageFont
+
+    img = Image.open(io.BytesIO(png_bytes)).convert("RGB")
+    draw = ImageDraw.Draw(img)
+    w, h = img.size
+    try:
+        font = ImageFont.truetype("arial.ttf", 15)
+    except Exception:                                      # noqa: BLE001
+        font = ImageFont.load_default()
+    marks: dict[int, tuple[int, int]] = {}
+    n = 1
+    for y in range(margin, h - margin + 1, step):
+        for x in range(margin, w - margin + 1, step):
+            marks[n] = (x, y)
+            r = 11
+            draw.ellipse([x - r, y - r, x + r, y + r],
+                         fill=(255, 235, 0), outline=(0, 0, 0))
+            draw.text((x - 6, y - 8), str(n), fill=(0, 0, 0), font=font)
+            n += 1
+    buf = io.BytesIO()
+    img.save(buf, "PNG")
+    return buf.getvalue(), marks
+
+
 class ControllerUnavailable(RuntimeError):
     """A required OS controller or target app could not be reached."""
 

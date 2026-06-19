@@ -11,3 +11,6 @@ S10code/state/sessions/
 
 # node deps (electron app)
 node_modules/
+
+# gateway runtime ledger DBs
+llm_gatewayV9/*.db

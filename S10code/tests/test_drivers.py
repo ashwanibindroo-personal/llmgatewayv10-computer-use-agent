@@ -7,6 +7,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from computer_use.drivers import AXTextDriver, VisionDriver, DriverConfig
 
 
+def _blank_png(w=400, h=400):
+    import io
+    from PIL import Image
+    buf = io.BytesIO()
+    Image.new("RGB", (w, h), (255, 255, 255)).save(buf, "PNG")
+    return buf.getvalue()
+
+
 class FakeClient:
     def __init__(self, replies):
         self._replies = list(replies)
@@ -40,7 +48,10 @@ class FakeDesktop:
         return True
 
     def screenshot(self):
-        return b"PNG"
+        # A real 400x400 PNG so annotate_grid (PIL) can mark it. With the
+        # default grid (step=150, margin=60) marks form a 2x2 lattice at
+        # x,y in {60, 210}; mark 4 is the bottom-right at (210, 210).
+        return _blank_png(400, 400)
 
     def click(self, x, y):
         self.clicked.append((x, y))
@@ -57,14 +68,15 @@ def test_ax_text_driver_stops_on_done():
     assert client.vision_calls == 0
 
 
-def test_vision_driver_clicks_then_done_and_counts_vision():
-    client = FakeClient(['{"action":"click","x":10,"y":20}',
-                         '{"action":"done","result":"drawn"}'])
+def test_vision_driver_set_of_marks_clicks_then_done():
+    # Set-of-marks: the model picks mark 4, which the grid maps to (210,210).
+    client = FakeClient(['{"action":"click","mark":4}',
+                         '{"action":"done","result":"hit"}'])
     desktop = FakeDesktop()
-    cfg = DriverConfig(goal="click target", max_steps=5)
+    cfg = DriverConfig(goal="click the target", max_steps=5)
     res = asyncio.run(VisionDriver(desktop, client, cfg).run())
-    assert res.success and res.result == "drawn"
-    assert desktop.clicked == [(10, 20)]
+    assert res.success and res.result == "hit"
+    assert desktop.clicked == [(210, 210)]
     assert client.vision_calls == 2  # one per turn
 
 

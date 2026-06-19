@@ -117,7 +117,7 @@ computer_use:
   description: |
     Automates the local Windows machine through a five-layer cascade
     (hotkeys, ax, ax_llm, electron-CDP, vision). Inputs in metadata: task
-    (required: calculator | electron | paint) plus per-task fields
+    (required: calculator | electron | canvas) plus per-task fields
     (expression, content, goal). Returns ComputerUseOutput with the chosen
     layer surfaced as output.path and vision_calls for the zero-vision
     constraint.

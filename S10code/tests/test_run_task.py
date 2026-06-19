@@ -20,6 +20,6 @@ def test_build_node_electron_content():
     assert node.metadata["content"] == "hi there"
 
 
-def test_build_node_paint():
-    node = build_node("paint")
-    assert node.metadata["task"] == "paint"
+def test_build_node_canvas():
+    node = build_node("canvas")
+    assert node.metadata["task"] == "canvas"
