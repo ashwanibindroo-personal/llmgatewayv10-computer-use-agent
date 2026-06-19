@@ -39,6 +39,40 @@ def _wait_for_port(host: str, port: int, timeout: float = 30.0) -> bool:
     return False
 
 
+_CANVAS_WIN_TITLE = "S10 Vision Canvas Target"
+
+
+def _focus_window_title(substr: str) -> bool:
+    """Best-effort: bring a window whose title contains `substr` to the front
+    so screenshots capture it (not whatever else was left open)."""
+    try:
+        import pygetwindow as gw
+
+        for w in gw.getWindowsWithTitle(substr):
+            try:
+                if w.isMinimized:
+                    w.restore()
+                w.activate()
+            except Exception:                              # noqa: BLE001
+                pass
+            return True
+    except Exception:                                      # noqa: BLE001
+        pass
+    return False
+
+
+def _any_window_title_contains(substr: str) -> bool:
+    """True if any top-level window title contains `substr`. The canvas page
+    sets document.title='HIT' on a real click, so this is a trustworthy hit
+    signal independent of what the model claims."""
+    try:
+        import pygetwindow as gw
+
+        return any(substr in (t or "") for t in gw.getAllTitles())
+    except Exception:                                      # noqa: BLE001
+        return False
+
+
 def _find_browser() -> str | None:
     """Resolve a Chromium-family browser (Edge or Chrome) to open the vision
     canvas in a clean app-mode window. Returns None if none is found, in which
@@ -148,8 +182,13 @@ class ComputerUseSkill:
         import subprocess
         d = self._desktop()
         subprocess.Popen(["calc.exe"])
-        time.sleep(1.5)
+        time.sleep(2.5)            # the UWP Calculator can be slow to be focusable
         d.focus_window(_CALC_TITLE)
+        # Calculator is single-instance: relaunching just refocuses an existing
+        # window that may hold a prior result. Esc clears it so a repeated run
+        # computes from a clean state.
+        d.hotkey("esc")
+        time.sleep(0.2)
         tokens = build_calculator_keys(expr)
         rec.step("hotkeys", "type", expr)
         d.type_keys(tokens)
@@ -275,9 +314,29 @@ class ComputerUseSkill:
             import webbrowser
             webbrowser.open(url)
         time.sleep(3.5)
+        # Bring the canvas window to the front so the screenshot captures it,
+        # not whatever else is open. Retry briefly — the window may still be
+        # painting right after launch.
+        for _ in range(5):
+            if _focus_window_title(_CANVAS_WIN_TITLE):
+                break
+            time.sleep(0.5)
+        time.sleep(0.5)
         cfg = DriverConfig(goal=goal, max_steps=6, recorder=rec)
         try:
-            return await VisionDriver(self._desktop(), self._client(), cfg).run()
+            res = await VisionDriver(self._desktop(), self._client(), cfg).run()
+            # The page sets its title to 'HIT' only on a genuine click inside
+            # the target, so this overrides the model's self-report (which can
+            # falsely 'done' when it can't even see the canvas).
+            verified_hit = _any_window_title_contains("HIT")
+            if verified_hit:
+                return DriverResult(True, res.turns,
+                                    "canvas target HIT (verified via window title)")
+            if res.success:
+                # Model claimed done but the page never registered a hit.
+                return DriverResult(False, res.turns, None,
+                                    "model reported done but no verified HIT")
+            return res
         finally:
             if proc is not None:
                 try:
