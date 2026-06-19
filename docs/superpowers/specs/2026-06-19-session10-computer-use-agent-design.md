@@ -1,5 +1,14 @@
 # Session 10 — Computer-Use Agent: Design
 
+> ⚠️ **Historical design record — partially superseded.** This is the *original*
+> design, kept for process history. Two tasks were re-targeted during live
+> testing on Windows 11: the Electron task moved from **VS Code** to a bundled
+> minimal Electron app (modern VS Code doesn't expose its renderer to CDP), and
+> the vision task moved from **MS Paint** to a label-less **HTML canvas** driven
+> by **set-of-marks** (pyautogui can't draw in Win11 Paint; raw-coordinate vision
+> is too imprecise). For the current, authoritative description see
+> [`README.md`](../../../README.md) and [`ARCHITECTURE.md`](../../../ARCHITECTURE.md).
+
 **Date:** 2026-06-19
 **Status:** Approved (brainstorming) → pending spec review
 

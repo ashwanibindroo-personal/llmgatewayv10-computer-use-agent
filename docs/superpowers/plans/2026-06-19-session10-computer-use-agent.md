@@ -1,5 +1,15 @@
 # Session 10 Computer-Use Agent Implementation Plan
 
+> ⚠️ **Historical implementation plan — partially superseded.** Kept for process
+> history. The plan targeted **VS Code** for the Electron task and **MS Paint**
+> for the vision task; during live testing on Windows 11 both were re-targeted —
+> to a bundled minimal Electron app and a label-less HTML canvas with
+> **set-of-marks**, respectively (VS Code doesn't expose its renderer to CDP;
+> pyautogui can't draw in Win11 Paint and raw-coordinate vision is too imprecise).
+> The task identifiers `vscode`/`paint` became `electron`/`canvas`. For the
+> current, authoritative description see [`README.md`](../../../README.md) and
+> [`ARCHITECTURE.md`](../../../ARCHITECTURE.md).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add a `computer_use` skill to the Session 9 DAG skill catalog (in a self-contained Session 10 repo) that automates the local Windows machine through a cost-laddered cascade and completes three tasks (Calculator, VS Code via Electron debug port, MS Paint via vision).
