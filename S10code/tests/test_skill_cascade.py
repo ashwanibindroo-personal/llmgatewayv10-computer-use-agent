@@ -53,3 +53,16 @@ def test_unknown_task_fails_cleanly(tmp_path):
     sk = _skill(tmp_path)
     res = asyncio.run(sk.run(NodeSpec(skill="computer_use", metadata={"task": "fly"})))
     assert not res.success and res.error_code == "interaction_failed"
+
+
+def test_controller_unavailable_maps_to_error_code(tmp_path, monkeypatch):
+    from computer_use.controllers import ControllerUnavailable
+    sk = _skill(tmp_path)
+    def boom(goal, expr, rec):
+        raise ControllerUnavailable("Calculator window not found")
+    monkeypatch.setattr(sk, "_calc_hotkeys", boom)
+    node = NodeSpec(skill="computer_use",
+                    metadata={"task": "calculator", "expression": "1+1="})
+    res = asyncio.run(sk.run(node))
+    assert not res.success
+    assert res.error_code == "controller_unavailable"

@@ -68,12 +68,14 @@ class ComputerUseSkill:
         goal = node.metadata.get("goal", f"compute {expr}")
         result = self._calc_hotkeys(goal, expr, rec)
         if result:
+            rec.stop(result=result)
             return self._pack("calculator", "hotkeys", rec, result,
                               time.time() - t0)
         # Escalate — hotkeys produced no readable result.
         rec.note("tried hotkeys → no clipboard result → escalating to ax_llm")
         return self._err("calculator", "interaction_failed",
-                         "hotkeys produced no result", time.time() - t0, rec=rec)
+                         "hotkeys produced no result", time.time() - t0, rec=rec,
+                         path="hotkeys")
 
     def _calc_hotkeys(self, goal: str, expr: str, rec) -> str | None:
         """Live: open Calculator, type the expression via fixed hotkeys, copy
@@ -91,7 +93,6 @@ class ComputerUseSkill:
         time.sleep(0.2)
         result = (d.read_clipboard() or "").strip()
         rec.step("hotkeys", "read_clipboard", outcome=result)
-        rec.stop(result=result)
         return result or None
 
     # ── vscode: Electron CDP 'page' layer ───────────────────────────────────
@@ -103,12 +104,11 @@ class ComputerUseSkill:
             return self._pack("vscode", "electron", rec, res.result,
                               time.time() - t0, turns=res.turns)
         return self._err("vscode", "interaction_failed", res.note,
-                         time.time() - t0)
+                         time.time() - t0, path="electron")
 
     async def _run_electron(self, goal: str, meta: dict, rec) -> DriverResult:
         """Live: launch VS Code with --remote-debugging-port, connect over CDP,
         create+edit+save a scratch file through the renderer DOM."""
-        import os
         import subprocess
         import tempfile
         from playwright.async_api import async_playwright
@@ -155,7 +155,7 @@ class ComputerUseSkill:
             return self._pack("paint", "vision", rec, res.result,
                               time.time() - t0, turns=res.turns)
         return self._err("paint", "interaction_failed", res.note,
-                         time.time() - t0)
+                         time.time() - t0, path="vision")
 
     async def _run_vision(self, goal: str, rec) -> DriverResult:
         """Live: open MS Paint, then drive the label-less canvas with the
@@ -175,10 +175,11 @@ class ComputerUseSkill:
         return AgentResult(success=True, agent_name=self.NAME,
                            output=out.model_dump(), elapsed_s=elapsed)
 
-    def _err(self, task, code, msg, elapsed, *, rec=None) -> AgentResult:
+    def _err(self, task, code, msg, elapsed, *, rec=None,
+             path: str = "hotkeys") -> AgentResult:
         if rec is not None:
             rec.stop(result=None)
-        out = ComputerUseOutput(task=task or "unknown", path="hotkeys",
+        out = ComputerUseOutput(task=task or "unknown", path=path,
                                 vision_calls=getattr(rec, "vision_calls", 0)
                                 if rec else 0)
         return AgentResult(success=False, agent_name=self.NAME,
