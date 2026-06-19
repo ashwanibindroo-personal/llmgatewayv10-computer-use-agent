@@ -12,7 +12,12 @@ Windows 11 + PowerShell. You need **two terminals**: one for the gateway
   npm install
   ```
   This installs Electron locally. `node_modules/` is gitignored, so a fresh
-  clone must run `npm install` before the task will launch.
+  clone must run `npm install` before the task will launch. If `npm install`
+  reports "up to date" but the task still says *Electron binary not found*
+  (the binary-download step was skipped), fetch it directly:
+  ```powershell
+  node node_modules/electron/install.js
+  ```
 - Gateway `.env` with your Anthropic key (not committed):
   - `llm_gatewayV9\.env` — needs `ANTHROPIC_API_KEY` and
     `ANTHROPIC_MODEL=claude-haiku-4-5-20251001`
