@@ -5,3 +5,6 @@ __pycache__/
 S10code/state/sessions/
 *.mp4
 .env
+
+# macOS cruft
+.DS_Store
