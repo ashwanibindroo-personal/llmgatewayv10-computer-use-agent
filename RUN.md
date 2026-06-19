@@ -156,9 +156,9 @@ byte-identical to Session 9.
 - **pyautogui failsafe:** slam the mouse to any screen corner to abort an
   in-flight run immediately. This is pyautogui's built-in failsafe and is
   always active.
-- **Vision task step cap:** `VisionDriver` is bounded to 8 steps by default
-  (`max_steps=8` in `skill.py`). If the vision LLM gets stuck, the run stops
-  after 8 turns and returns `success=False`.
+- **Vision task step cap:** the canvas run is bounded to 6 steps
+  (`max_steps=6` in `_run_vision` in `skill.py`). If the vision LLM gets stuck,
+  the run stops after 6 turns and returns `success=False`.
 - **Live tasks move the real mouse and keyboard.** Do not click or type while
   a task is running.
 
@@ -169,8 +169,8 @@ byte-identical to Session 9.
 | Gateway not running — canvas fails with `ConnectionRefusedError` | Start Terminal 1 (`uv run main.py`) before running canvas |
 | `ANTHROPIC_API_KEY` not found | Add it to `llm_gatewayV9\.env` |
 | Electron not found / CDP port didn't open | Run `npm install` in `S10code/electron_app/`; requires Node.js + npm |
-| Electron connection refused on CDP port | Electron took >6 s to start; raise `time.sleep(6.0)` in `skill.py` `_run_electron` |
-| `ControllerUnavailable: window 'Calculator'` | Calculator window did not focus in time; increase `time.sleep(1.5)` in `_calc_hotkeys` |
+| Electron connection refused on CDP port | The agent polls the debug port for up to 30 s (`_wait_for_port`); if it still times out, the Electron binary is likely missing — see the row above (`npm install` / `node node_modules/electron/install.js`) |
+| `ControllerUnavailable: window 'Calculator'` | Usually a slow launch — the launch wait is `time.sleep(2.5)` in `_calc_hotkeys`; raise it if needed. Multiple matching Calculator windows are now handled automatically (first visible is picked) |
 | pyautogui `FailSafeException` | Mouse hit a corner (intentional abort); re-run |
 | Vision task loops without `done` | Vision LLM returned unexpected JSON; run will stop at the step cap |
 | `WinError 5: Access is denied` writing state files | Defender scanning mid-rename → admin PowerShell: `Add-MpPreference -ExclusionPath "<repo path>"` |
