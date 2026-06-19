@@ -25,7 +25,7 @@ constraints (vision, Electron debug-port, zero-vision).
 | Task | Settles at layer | Constraint satisfied |
 |---|---|---|
 | **Calculator** — compute an arithmetic expression, read result via clipboard | **hotkeys** (Layer 1 — zero LLM, zero vision) | **zero-vision** (`vision_calls == 0`) |
-| **VS Code** — open a scratch file in a temp folder, type content, save via the renderer DOM | **electron** (CDP over `--remote-debugging-port=9222`) | **Electron debug-port** |
+| **Electron app** — launch the bundled minimal Electron app (`S10code/electron_app/`), type content into `#editor`, read back and verify, persist to `electron_out.txt` | **electron** (CDP over `--remote-debugging-port=9222`) | **Electron debug-port** |
 | **MS Paint** — open a blank canvas and draw a circle in the centre | **vision** (Layer 5 / last resort — screenshot + coordinate-based vision) | **vision (≥1 vision call)** |
 
 ### Constraint coverage (explicit)
@@ -33,9 +33,10 @@ constraints (vision, Electron debug-port, zero-vision).
 - **≥1 vision call** — MS Paint task; the `VisionDriver` sends a raw
   screenshot and asks for pixel coordinates per turn (coordinate-based vision,
   not set-of-marks annotation); `trajectory.json` records `vision_calls > 0`.
-- **≥1 Electron debug-port** — VS Code task; launched with
+- **≥1 Electron debug-port** — Electron app task; a bundled minimal Electron
+  app shipped in `S10code/electron_app/` is launched with
   `--remote-debugging-port=9222`; Playwright `connect_over_cdp` drives the
-  renderer DOM.
+  renderer DOM via the page tool.
 - **≥1 zero-vision** — Calculator task; hotkeys + clipboard only;
   `trajectory.json` records `vision_calls == 0`.
 
@@ -108,16 +109,25 @@ The skill is added as **capability is data** — no changes to `flow.py`:
 ### Option A — direct task runner (recommended for demo/recording)
 
 ```powershell
-# Terminal 1: boot the gateway (needed for vscode and paint tasks)
+# Terminal 1: boot the gateway (needed for the paint task only)
 cd "C:\The School Of AI\Session 10 - Computer Use Agent\llm_gatewayV9"
 uv run main.py
 
 # Terminal 2: run a task
 cd "C:\The School Of AI\Session 10 - Computer Use Agent\S10code"
 uv run python run_task.py calculator --expr "12.5*8+100="
-uv run python run_task.py vscode --content "Hello from the computer-use agent."
+uv run python run_task.py electron --content "Hello from the computer-use agent."
 uv run python run_task.py paint
 ```
+
+> **Electron app prerequisite:** before running the `electron` task for the
+> first time, install its dependency once:
+> ```powershell
+> cd "C:\The School Of AI\Session 10 - Computer Use Agent\S10code\electron_app"
+> npm install
+> ```
+> Requires Node.js + npm. `node_modules/` is gitignored, so a fresh clone must
+> run `npm install` before the task will launch.
 
 Set `CU_SLOWMO_MS=300` for a followable recording:
 ```powershell

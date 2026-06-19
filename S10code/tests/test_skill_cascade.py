@@ -36,14 +36,14 @@ def test_paint_uses_vision_path(tmp_path, monkeypatch):
     assert res.output["vision_calls"] == 1
 
 
-def test_vscode_uses_electron_path(tmp_path, monkeypatch):
+def test_electron_uses_electron_path(tmp_path, monkeypatch):
     sk = _skill(tmp_path)
     async def fake_electron(goal, meta, rec):
-        rec.step("electron", "create_file", "scratch.txt")
-        return DriverResult(True, 1, "saved")
+        rec.step("electron", "type_content", "#editor")
+        return DriverResult(True, 1, "typed")
     monkeypatch.setattr(sk, "_run_electron", fake_electron)
     node = NodeSpec(skill="computer_use",
-                    metadata={"task": "vscode", "content": "hello"})
+                    metadata={"task": "electron", "content": "hello"})
     res = asyncio.run(sk.run(node))
     assert res.success and res.output["path"] == "electron"
     assert res.output["vision_calls"] == 0

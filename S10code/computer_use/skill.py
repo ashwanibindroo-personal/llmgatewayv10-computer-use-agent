@@ -6,7 +6,7 @@ Per-task cascade (cheapest viable layer first; escalate on insufficiency):
   * calculator → Layer 1 hotkeys (zero LLM, zero vision); if clipboard
     read returns empty the run fails cleanly (ax_llm is a documented
     extension point, not implemented).
-  * vscode     → Electron CDP 'page' layer over the debug port.
+  * electron   → bundled Electron app via CDP 'page' layer over the debug port.
   * paint      → forced vision layer (canvas has no AX labels).
 """
 from __future__ import annotations
@@ -22,6 +22,40 @@ from .drivers import AXTextDriver, DriverConfig, DriverResult, VisionDriver
 from .recorder import start_recording
 
 _CALC_TITLE = "Calculator"
+
+
+def _wait_for_port(host: str, port: int, timeout: float = 30.0) -> bool:
+    """Poll until a TCP port accepts a connection, or timeout. Replaces a
+    fixed sleep so we attach as soon as the CDP endpoint is live."""
+    import socket
+
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            with socket.create_connection((host, port), timeout=1.0):
+                return True
+        except OSError:
+            time.sleep(0.5)
+    return False
+
+
+async def _await_renderer_page(browser, timeout: float = 20.0):
+    """Wait for the Electron app's renderer page to appear over CDP. Right
+    after launch `contexts[].pages` can be empty for a moment, so poll across
+    every context and prefer the app window (index.html); fall back to any
+    page once one exists."""
+    import asyncio
+
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        pages = [pg for c in browser.contexts for pg in c.pages]
+        app_pg = next((pg for pg in pages if "index.html" in pg.url), None)
+        if app_pg is not None:
+            return app_pg
+        if pages:
+            return pages[0]
+        await asyncio.sleep(0.5)
+    return None
 
 
 class ComputerUseSkill:
@@ -50,8 +84,8 @@ class ComputerUseSkill:
         try:
             if task == "calculator":
                 return self._calculator(node, rec, t0)
-            if task == "vscode":
-                return await self._vscode(node, rec, t0)
+            if task == "electron":
+                return await self._electron(node, rec, t0)
             if task == "paint":
                 return await self._paint(node, rec, t0)
             rec.stop(result=None)
@@ -97,55 +131,84 @@ class ComputerUseSkill:
         rec.step("hotkeys", "read_clipboard", outcome=result)
         return result or None
 
-    # ── vscode: Electron CDP 'page' layer ───────────────────────────────────
-    async def _vscode(self, node, rec, t0) -> AgentResult:
+    # ── electron: bundled Electron app, CDP 'page' layer ─────────────────────
+    async def _electron(self, node, rec, t0) -> AgentResult:
         res = await self._run_electron(node.metadata.get("goal", "edit a file"),
                                        node.metadata, rec)
         rec.stop(result=res.result)
         if res.success:
-            return self._pack("vscode", "electron", rec, res.result,
+            return self._pack("electron", "electron", rec, res.result,
                               time.time() - t0, turns=res.turns)
-        return self._err("vscode", "interaction_failed", res.note,
+        return self._err("electron", "interaction_failed", res.note,
                          time.time() - t0, path="electron")
 
     async def _run_electron(self, goal: str, meta: dict, rec) -> DriverResult:
-        """Live: launch VS Code with --remote-debugging-port, connect over CDP,
-        create+edit+save a scratch file through the renderer DOM."""
+        """Live: launch the bundled Electron app with --remote-debugging-port,
+        attach over CDP, and drive its renderer with the page tool — type into
+        the editor, read it back, and persist the text as a tangible artifact.
+
+        We ship a tiny Electron app (electron_app/) rather than target VS Code:
+        modern VS Code does not expose its renderer to CDP (the port opens but
+        /json/list is empty), whereas an app we control reliably exposes its
+        page — which is what this task exists to demonstrate."""
         import subprocess
         import tempfile
         from playwright.async_api import async_playwright
 
         content = meta.get("content", "Hello from the computer-use agent.")
+        port = int(meta.get("port", 9222))
+        app_dir = Path(__file__).resolve().parent.parent / "electron_app"
+        electron_exe = (Path(meta["electron_exe"]) if meta.get("electron_exe")
+                        else app_dir / "node_modules" / "electron" / "dist" / "electron.exe")
+        if not electron_exe.is_file():
+            raise ControllerUnavailable(
+                f"Electron binary not found at {electron_exe}. "
+                f"Run `npm install` in {app_dir}.")
         scratch = Path(tempfile.gettempdir()) / "s10_cu_scratch"
         scratch.mkdir(exist_ok=True)
-        target = scratch / "scratch.txt"
-        port = int(meta.get("port", 9222))
-        udd = scratch / "udd"
-        code_exe = meta.get("code_exe", "code")
-        cmd = (f'"{code_exe}" --remote-debugging-port={port} '
-               f'--user-data-dir="{udd}" -n "{scratch}"')
-        subprocess.Popen(cmd, shell=True)
-        time.sleep(6.0)
+        target = scratch / "electron_out.txt"
+
+        # Launch detached with stdio to DEVNULL so the GUI child never holds the
+        # caller's console/pipe (otherwise the runner can hang waiting for EOF).
+        subprocess.Popen(
+            [str(electron_exe), str(app_dir), f"--remote-debugging-port={port}"],
+            shell=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL,
+            creationflags=getattr(subprocess, "DETACHED_PROCESS", 0),
+        )
+        # Poll the port (replaces a fixed sleep). 127.0.0.1 not "localhost":
+        # localhost can resolve to IPv6 ::1 while Chromium binds IPv4 only.
+        if not _wait_for_port("127.0.0.1", port, timeout=30.0):
+            raise ControllerUnavailable(
+                f"Electron remote-debugging port {port} did not open within 30s")
         async with async_playwright() as p:
-            browser = await p.chromium.connect_over_cdp(f"http://localhost:{port}")
-            ctx = browser.contexts[0]
-            page = next((pg for pg in ctx.pages if "workbench" in pg.url), ctx.pages[0])
+            browser = await p.chromium.connect_over_cdp(f"http://127.0.0.1:{port}")
+            page = await _await_renderer_page(browser, timeout=20.0)
+            if page is None:
+                await browser.close()
+                raise ControllerUnavailable(
+                    "connected to Electron CDP but no renderer page appeared")
             rec.step("electron", "connect_cdp", f"port {port}")
-            # Create + name a file via the Quick Open / command palette.
-            await page.keyboard.press("Control+N")
-            await page.keyboard.type(content)
-            rec.step("electron", "type_content", target.name)
-            await page.keyboard.press("Control+Shift+S")
-            await page.wait_for_timeout(800)
-            await page.keyboard.type(str(target))
-            await page.keyboard.press("Enter")
-            await page.wait_for_timeout(800)
-            rec.step("electron", "save_file", str(target),
-                     outcome="ok" if target.exists() else "unverified")
+            # Drive the renderer through the page tool: type into the editor,
+            # then read the value straight back from the DOM to verify.
+            await page.fill("#editor", content)
+            rec.step("electron", "type_content", "#editor")
+            typed = await page.input_value("#editor")
+            await page.evaluate(
+                "document.getElementById('status').textContent = 'typed by agent'")
+            ok = typed == content
+            target.write_text(typed, encoding="utf-8")  # tangible artifact
+            rec.step("electron", "verify_and_write", str(target),
+                     outcome="ok" if ok else f"mismatch (got {len(typed)} chars)")
+            try:
+                await page.close()                       # close window → app quits
+            except Exception:                            # noqa: BLE001
+                pass
             await browser.close()
-        return DriverResult(target.exists(), 3,
-                            f"saved {target}" if target.exists() else None,
-                            "" if target.exists() else "save unverified")
+        return DriverResult(ok, 2,
+                            f"typed+verified in Electron renderer; wrote {target}"
+                            if ok else None,
+                            "" if ok else "renderer value mismatch")
 
     # ── paint: forced vision layer (last resort) ────────────────────────────
     async def _paint(self, node, rec, t0) -> AgentResult:

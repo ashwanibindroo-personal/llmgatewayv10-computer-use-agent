@@ -1,0 +1,12 @@
+{
+  "name": "s10-electron-demo",
+  "version": "1.0.0",
+  "description": "Minimal Electron app for the Session 10 computer-use Electron debug-port task. Launched with --remote-debugging-port; the agent drives its renderer via the CDP page tool.",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^33.0.0"
+  }
+}

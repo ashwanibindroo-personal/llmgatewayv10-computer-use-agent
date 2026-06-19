@@ -14,9 +14,9 @@ def test_build_node_calculator_defaults():
     assert node.metadata["expression"] == "12.5*8+100="
 
 
-def test_build_node_vscode_content():
-    node = build_node("vscode", content="hi there")
-    assert node.metadata["task"] == "vscode"
+def test_build_node_electron_content():
+    node = build_node("electron", content="hi there")
+    assert node.metadata["task"] == "electron"
     assert node.metadata["content"] == "hi there"
 
 

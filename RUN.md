@@ -6,8 +6,13 @@ Windows 11 + PowerShell. You need **two terminals**: one for the gateway
 ## Prerequisites
 
 - Python 3.11+ and [`uv`](https://docs.astral.sh/uv/)
-- VS Code installed and launchable as `code` from PowerShell (needed for the
-  `vscode` task).
+- Node.js + npm (needed for the `electron` task). One-time setup:
+  ```powershell
+  cd "C:\The School Of AI\Session 10 - Computer Use Agent\S10code\electron_app"
+  npm install
+  ```
+  This installs Electron locally. `node_modules/` is gitignored, so a fresh
+  clone must run `npm install` before the task will launch.
 - Gateway `.env` with your Anthropic key (not committed):
   - `llm_gatewayV9\.env` — needs `ANTHROPIC_API_KEY` and
     `ANTHROPIC_MODEL=claude-haiku-4-5-20251001`
@@ -26,9 +31,9 @@ cd "C:\The School Of AI\Session 10 - Computer Use Agent\llm_gatewayV9"
 uv run main.py
 ```
 
-Expect `Uvicorn running on http://0.0.0.0:8109`. The `vscode` and `paint`
-tasks call this gateway for every LLM/vision request. The `calculator` task
-does not call the gateway at all (hotkeys only).
+Expect `Uvicorn running on http://0.0.0.0:8109`. Only the `paint` task calls
+this gateway (for vision requests). The `calculator` and `electron` tasks do
+not call the gateway at all (hotkeys/clipboard and CDP only, respectively).
 
 **Restart the gateway after any change to `agent_routing.yaml`, `router.py`,
 `providers.py`, `main.py`, or `pricing.py`** — those load once at startup.
@@ -63,30 +68,26 @@ What happens:
 - Trajectory written to:
   `state\sessions\direct\computer_use\calculator_1\`
 
-## Step 4 — Run the VS Code task (Terminal 2)
+## Step 4 — Run the Electron app task (Terminal 2)
 
-VS Code must be launchable as `code` from PowerShell. Verify first:
-```powershell
-code --version
-```
+Ensure `npm install` has been run in `S10code/electron_app/` (one-time — see
+Prerequisites).
 
-Then run:
 ```powershell
-uv run python run_task.py vscode --content "Hello from the computer-use agent."
+uv run python run_task.py electron --content "Hello from the computer-use agent."
 ```
 
 What happens:
-- VS Code launches with `--remote-debugging-port=9222` pointing at a temp
-  scratch folder (`%TEMP%\s10_cu_scratch`).
-- Playwright connects over CDP, opens a new file, types the content, saves it
-  as `scratch.txt` via Save As.
+- The bundled minimal Electron app (`S10code/electron_app/`) launches with
+  `--remote-debugging-port=9222`; a temp working directory (`%TEMP%\s10_cu_scratch`)
+  is used for output.
+- Playwright connects over CDP via `connect_over_cdp` and drives the renderer
+  page using the page tool: it types the content into the `#editor` textarea,
+  reads the value back to verify it, then writes the text to
+  `%TEMP%\s10_cu_scratch\electron_out.txt` as the tangible artifact.
 - `vision_calls=0` confirms the Electron CDP layer needs no screenshots.
 - Trajectory written to:
-  `state\sessions\direct\computer_use\vscode_1\`
-
-> Allow ~8 seconds for VS Code to start before Playwright connects. If the
-> run fails with a connection error, VS Code may be slow on this machine —
-> the `time.sleep(6.0)` in the driver can be raised in `skill.py`.
+  `state\sessions\direct\computer_use\electron_1\`
 
 ## Step 5 — Run the MS Paint task (Terminal 2, gateway must be running)
 
@@ -125,7 +126,7 @@ Get-Content "state\sessions\direct\computer_use\calculator_1\trajectory.json"
   `vision_called`).
 - `notes` — escalation decisions (populated when the cascade escalates).
 - `layer_counts` — `{layer_name: step_count}` summary.
-- `vision_calls` — total vision API calls (0 for calculator and vscode).
+- `vision_calls` — total vision API calls (0 for calculator and electron).
 - `result` — the final result string returned by the skill.
 
 Individual step files (`step_NN.json`) and screenshots (`step_NN_screen.png`)
@@ -161,10 +162,10 @@ byte-identical to Session 9.
 
 | Symptom | Fix |
 |---|---|
-| Gateway not running — paint/vscode fail with `ConnectionRefusedError` | Start Terminal 1 (`uv run main.py`) before running paint or vscode |
+| Gateway not running — paint fails with `ConnectionRefusedError` | Start Terminal 1 (`uv run main.py`) before running paint |
 | `ANTHROPIC_API_KEY` not found | Add it to `llm_gatewayV9\.env` |
-| VS Code connection refused on CDP port | VS Code took >6 s to start; raise `time.sleep(6.0)` in `skill.py` `_run_electron` |
-| `code: command not found` | Add VS Code to PATH, or install it; verify with `code --version` |
+| Electron not found / CDP port didn't open | Run `npm install` in `S10code/electron_app/`; requires Node.js + npm |
+| Electron connection refused on CDP port | Electron took >6 s to start; raise `time.sleep(6.0)` in `skill.py` `_run_electron` |
 | `ControllerUnavailable: window 'Calculator'` | Calculator window did not focus in time; increase `time.sleep(1.5)` in `_calc_hotkeys` |
 | pyautogui `FailSafeException` | Mouse hit a corner (intentional abort); re-run |
 | Vision task loops without `done` | Vision LLM returned unexpected JSON; run will stop at the step cap |

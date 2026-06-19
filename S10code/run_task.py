@@ -6,7 +6,7 @@ for demoing/recording one task without the Planner. The orchestrator path
 
 Usage:
   uv run python run_task.py calculator --expr "12.5*8+100="
-  uv run python run_task.py vscode --content "hello from the agent"
+  uv run python run_task.py electron --content "hello from the agent"
   uv run python run_task.py paint
 """
 from __future__ import annotations
@@ -51,7 +51,7 @@ async def _run(node: NodeSpec) -> int:
 
 def main(argv: list[str]) -> int:
     p = argparse.ArgumentParser()
-    p.add_argument("task", choices=["calculator", "vscode", "paint"])
+    p.add_argument("task", choices=["calculator", "electron", "paint"])
     p.add_argument("--expr", default="12.5*8+100=")
     p.add_argument("--content", default="Hello from the computer-use agent.")
     p.add_argument("--goal", default=None)

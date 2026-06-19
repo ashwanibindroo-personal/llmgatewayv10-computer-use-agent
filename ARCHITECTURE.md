@@ -62,7 +62,7 @@ Every escalation decision is logged as a human-readable string in
 | Task | Settles at | Why |
 |---|---|---|
 | **Calculator** | hotkeys | Fixed arithmetic expression → deterministic keystrokes; clipboard returns the result. If clipboard is empty the run fails cleanly. An `ax_llm` fallback is a documented extension point (not implemented, since the hotkeys + clipboard path is deterministic). Vision is never needed. |
-| **VS Code** | electron | VS Code is an Electron app; launched with `--remote-debugging-port=9222`; Playwright `connect_over_cdp` drives the renderer DOM to create, type into, and save a file. |
+| **Electron app** | electron | A bundled minimal Electron app (`S10code/electron_app/`) launched with `--remote-debugging-port=9222`; Playwright `connect_over_cdp` drives the renderer via the page tool — types into `#editor`, reads back and verifies, then persists to `electron_out.txt`. (Modern VS Code does not expose its renderer to CDP — `/json/list` returns no page targets — so we ship a small Electron app we control, which reliably exposes its renderer page. This still demonstrates the exact required mechanism.) |
 | **MS Paint** | vision | The canvas has no accessibility labels; a raw screenshot is sent to the vision LLM, which returns pixel coordinates for the agent to act on (coordinate-based vision, not set-of-marks annotation). |
 
 ## 4. The trajectory recorder (`recorder.py`)

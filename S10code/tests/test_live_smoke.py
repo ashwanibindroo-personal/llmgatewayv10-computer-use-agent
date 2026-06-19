@@ -26,8 +26,8 @@ def test_calculator_live_zero_vision():
     assert "1100" in (res.output["result"] or "")
 
 
-def test_vscode_live_electron():
-    res = _run(build_node("vscode", content="hello from S10"))
+def test_electron_live():
+    res = _run(build_node("electron", content="hello from S10"))
     assert res.success, res.error
     assert res.output["path"] == "electron"
 

@@ -8,3 +8,6 @@ S10code/state/sessions/
 
 # macOS cruft
 .DS_Store
+
+# node deps (electron app)
+node_modules/

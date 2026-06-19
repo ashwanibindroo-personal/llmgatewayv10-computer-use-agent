@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>S10 Computer-Use Electron Demo</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 2rem; color: #1a1a1a; }
+    h1 { font-size: 1.3rem; }
+    #editor { width: 100%; height: 220px; font-size: 1rem; padding: .6rem;
+              box-sizing: border-box; }
+    #status { margin-top: .8rem; font-weight: 600; color: #0a7; }
+  </style>
+</head>
+<body>
+  <h1>Session 10 — Computer-Use Electron Demo</h1>
+  <p>This renderer is driven by the agent over the Electron remote-debugging
+     port via Playwright's CDP <code>page</code> tool.</p>
+  <textarea id="editor" placeholder="the agent types here..."></textarea>
+  <div id="status">idle</div>
+</body>
+</html>
