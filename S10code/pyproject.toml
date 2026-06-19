@@ -40,4 +40,5 @@ asyncio_default_fixture_loop_scope = "session"
 markers = [
     "network: test requires internet access",
     "embed: test requires the embedding endpoint (gateway V8)",
+    "live: drives the real mouse/keyboard/screen; run explicitly with -m live",
 ]
