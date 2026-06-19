@@ -1,0 +1,33 @@
+# V8 agent → provider pinning. Map a skill name (the `agent` field on
+# /v1/chat) to a preferred provider name. Callers can still override
+# per-call by sending provider=... explicitly.
+#
+# Defaults below mirror the brief's design rationale. The Planner needs
+# the strongest reasoner available locally, the bulky text skills go to
+# Gemini for long-context comfort, and the cheap classifier-style
+# skills land on the small fast workers.
+#
+# Notes:
+# - Pinning to a provider that is currently in cooldown causes a single
+#   short wait (up to 30s) before the gateway falls back through the
+#   normal failover ladder. The pin is a preference, not a hard binding.
+# - Add a `tag: provider` line to introduce a new pin. No code change.
+
+# Session 9 routing: cognitive skills → Anthropic (Claude Haiku 4.5); Critic →
+# Groq for provider diversity in traces (falls back to the ladder when no
+# GROQ key is configured); browser → anthropic: the a11y/vision driver loops
+# fire bursts of calls from parallel browser nodes, which blew through
+# gemini's 15 rpm free tier (502/503). Claude Haiku is vision-capable with
+# 100 rpm paid limits, so both driver layers route here now.
+planner: anthropic
+researcher: anthropic
+distiller: anthropic
+summariser: anthropic
+critic: anthropic   # was groq, but no GROQ key is configured in .env and the
+                    # fallback ladder 503'd under parallel critic bursts
+formatter: anthropic
+retriever: anthropic
+sandbox_executor: anthropic   # never hits the LLM (bypassed); pin is cosmetic
+coder: anthropic
+verifier: anthropic
+browser: anthropic
