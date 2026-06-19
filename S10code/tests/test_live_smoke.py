@@ -19,11 +19,12 @@ def _run(node):
 
 
 def test_calculator_live_zero_vision():
+    # 12.5*8 = 100, +100 = 200 (Windows Calculator).
     res = _run(build_node("calculator", expr="12.5*8+100="))
     assert res.success, res.error
     assert res.output["path"] == "hotkeys"
     assert res.output["vision_calls"] == 0
-    assert "1100" in (res.output["result"] or "")
+    assert "200" in (res.output["result"] or "")
 
 
 def test_electron_live():
