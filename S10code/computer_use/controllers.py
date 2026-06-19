@@ -104,6 +104,14 @@ class ControllerUnavailable(RuntimeError):
     """A required OS controller or target app could not be reached."""
 
 
+def _safe_visible(win) -> bool:
+    """is_visible() that never raises (some UIA wrappers throw on query)."""
+    try:
+        return bool(win.is_visible())
+    except Exception:                                      # noqa: BLE001
+        return False
+
+
 class LiveDesktop:
     """Thin live wrappers. Imports happen lazily so the pure helpers above
     (and their tests) never require a desktop session."""
@@ -159,10 +167,21 @@ class LiveDesktop:
 
     def focus_window(self, title_re: str):
         from pywinauto import Desktop
+
         try:
-            win = Desktop(backend="uia").window(title_re=title_re)
+            # `.window(...)` raises when several windows match (e.g. a leftover
+            # Calculator plus a fresh one). Enumerate and pick the first visible
+            # top-level match instead of failing on ambiguity.
+            wins = Desktop(backend="uia").windows(title_re=title_re,
+                                                  top_level_only=True)
+            visible = [w for w in wins if _safe_visible(w)] or wins
+            if not visible:
+                raise ControllerUnavailable(f"window {title_re!r}: not found")
+            win = visible[0]
             win.set_focus()
             return win
+        except ControllerUnavailable:
+            raise
         except Exception as e:  # noqa: BLE001
             raise ControllerUnavailable(f"window {title_re!r}: {e}") from e
 
