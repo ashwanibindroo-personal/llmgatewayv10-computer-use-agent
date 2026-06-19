@@ -118,6 +118,7 @@ ErrorCode = Literal[
     "interaction_failed",    # could not complete the goal within turn cap
     "timeout",               # wall-clock cap hit
     "vlm_unavailable",       # all vision providers refused or 503'd
+    "controller_unavailable",  # a required OS controller/app was unavailable
 ]
 
 
@@ -154,6 +155,21 @@ class BrowserOutput(BaseModel):
     content: str | None = None
     actions: list[dict] = Field(default_factory=list)
     final_url: str | None = None
+
+
+class ComputerUseOutput(BaseModel):
+    """Session 10: typed payload the ComputerUse skill writes into
+    AgentResult.output. `path` is the cascade layer the skill settled on;
+    `vision_calls` lets the zero-vision constraint be asserted from the
+    output alone."""
+
+    task: str
+    path: Literal["hotkeys", "ax", "ax_llm", "electron", "vision"]
+    turns: int = 0
+    result: str | None = None
+    actions: list[dict] = Field(default_factory=list)
+    trajectory_dir: str | None = None
+    vision_calls: int = 0
 
 
 class NodeState(BaseModel):
