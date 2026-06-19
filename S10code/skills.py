@@ -319,6 +319,29 @@ async def run_skill(skill: Skill, node_id: str, graph_nodes,
             result.elapsed_s = time.time() - started
         return result, rendered
 
+    if skill.name == "computer_use":
+        # Same seam as browser/sandbox_executor: the skill owns its cascade
+        # (hotkeys → ax → ax_llm → electron → vision) and never uses the
+        # LLM text/tool channel here, so bypass render_prompt's gateway
+        # dispatch and hand off to ComputerUseSkill.run(NodeSpec).
+        node_dict = graph_nodes[node_id]
+        node_spec = NodeSpec(
+            skill="computer_use",
+            inputs=node_dict.get("inputs") or [],
+            metadata=node_dict.get("metadata") or {},
+        )
+        import os
+        from computer_use.skill import ComputerUseSkill
+        sk = ComputerUseSkill(
+            artifacts_root=str(ROOT / "state" / "sessions" / session_id / "computer_use"),
+            session=session_id,
+            slowmo_ms=int(os.environ.get("CU_SLOWMO_MS", "0") or "0"),
+        )
+        result = await sk.run(node_spec)
+        if not result.elapsed_s:
+            result.elapsed_s = time.time() - started
+        return result, rendered
+
     tools = tool_payload(skill.tools_allowed)
     if tools:
         # Multi-turn tool-use loop. mcp_runner opens one MCP stdio session
