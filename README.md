@@ -7,7 +7,7 @@ discipline.
 
 **Demo video:** _(YouTube link — add after recording)_
 
-**Repo:** _(GitHub repo URL — add after pushing)_
+**Repo:** https://github.com/ashwanibindroo-personal/llmgatewayv10-computer-use-agent
 
 ---
 
