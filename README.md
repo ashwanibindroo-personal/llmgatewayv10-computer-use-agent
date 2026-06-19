@@ -5,7 +5,7 @@ automates the **local Windows 11 machine** through a cost-laddered cascade,
 completing three desktop tasks and producing trajectory evidence of cascade
 discipline.
 
-**Demo video:** _(YouTube link — add after recording)_
+**Demo video:** https://youtu.be/trRrAzsE3lw
 
 **Repo:** https://github.com/ashwanibindroo-personal/llmgatewayv10-computer-use-agent
 
