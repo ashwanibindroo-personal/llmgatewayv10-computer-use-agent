@@ -18,11 +18,11 @@ engine.
 
 **Invariant honored:** `flow.py` is byte-identical to Session 9. The
 `computer_use` capability is added entirely through (a) data — a YAML block and
-a prompt — and (b) one pre-existing extension seam in `skills.py`.
+a prompt — and (b) one pre-existing extension seam in `S10code/skills.py`.
 
-## 2. The `skills.py` dispatch seam
+## 2. The `S10code/skills.py` dispatch seam
 
-`skills.py` dispatches most skills by rendering their prompt and calling the
+`S10code/skills.py` dispatches most skills by rendering their prompt and calling the
 gateway's `/v1/chat`. Two pre-existing branches bypass that channel for skills
 that own their own control loop: `sandbox_executor` (runs Python code) and
 `browser` (runs the four-layer web cascade). Session 10 adds a third:
@@ -34,7 +34,7 @@ if skill.name == "computer_use":     → ComputerUseSkill.run(NodeSpec)   ← S1
 # all other skills → gateway /v1/chat
 ```
 
-The `computer_use` branch (lines 322–343 of `skills.py`) builds a `NodeSpec`
+The `computer_use` branch (lines 322–343 of `S10code/skills.py`) builds a `NodeSpec`
 from the node's `inputs` and `metadata`, instantiates `ComputerUseSkill`, and
 returns the typed `AgentResult`. The orchestrator never learns what a desktop
 is — it just schedules a node and receives the same shaped result it receives
@@ -50,7 +50,7 @@ A cost ladder — cheapest viable layer first, escalate only on insufficiency:
 | **ax** | UIAutomation: find control by name, `Invoke()` directly | No LLM, no vision | `pywinauto` (uia backend) |
 | **ax_llm** | AX tree serialised → numbered legend → `/v1/chat`; LLM picks one action per turn | Text LLM, no image | `pywinauto` + `V9Client.chat` |
 | **electron** | Launch app with `--remote-debugging-port`, `connect_over_cdp`, drive renderer DOM | No vision | `playwright` |
-| **vision** | Screenshot → `/v1/vision` (set-of-marks); act on returned pixel coords | Vision LLM (expensive — last resort) | `mss`/`Pillow` + `V9Client.vision` |
+| **vision** | Screenshot → `/v1/vision` (coordinate-based); act on returned pixel coords | Vision LLM (expensive — last resort) | `mss`/`Pillow` + `V9Client.vision` |
 
 **Escalation rule:** stop at the first layer that completes the goal. Escalate
 when the current layer's locate/act step fails or returns an empty result.
@@ -61,9 +61,9 @@ Every escalation decision is logged as a human-readable string in
 
 | Task | Settles at | Why |
 |---|---|---|
-| **Calculator** | hotkeys | Fixed arithmetic expression → deterministic keystrokes; clipboard returns the result. Vision is never needed. |
+| **Calculator** | hotkeys | Fixed arithmetic expression → deterministic keystrokes; clipboard returns the result. If clipboard is empty the run fails cleanly. An `ax_llm` fallback is a documented extension point (not implemented, since the hotkeys + clipboard path is deterministic). Vision is never needed. |
 | **VS Code** | electron | VS Code is an Electron app; launched with `--remote-debugging-port=9222`; Playwright `connect_over_cdp` drives the renderer DOM to create, type into, and save a file. |
-| **MS Paint** | vision | The canvas has no accessibility labels; only a screenshot + vision LLM can locate where to draw. |
+| **MS Paint** | vision | The canvas has no accessibility labels; a raw screenshot is sent to the vision LLM, which returns pixel coordinates for the agent to act on (coordinate-based vision, not set-of-marks annotation). |
 
 ## 4. The trajectory recorder (`recorder.py`)
 
@@ -78,7 +78,8 @@ rec.stop(result=...)                # flushes trajectory.json
 
 Each run directory contains:
 - `step_NN.json` — per-step record.
-- `step_NN_screen.png` — raw screenshot (vision steps only).
+- `step_NN_screen.png` — raw screenshot (vision steps only; the current `VisionDriver` uses coordinate-based vision and does not produce set-of-marks annotation).
+- `step_NN_marked.png` — written only when a marked image is supplied to `rec.step()`; the recorder supports it, but the current `VisionDriver` does not emit one.
 - `trajectory.json` — ordered step log, `layer_counts`, `vision_calls` (the
   zero-vision assertion field), `notes` (escalation log), and final `result`.
 
@@ -89,5 +90,5 @@ Run directories land under:
 
 | | |
 |---|---|
-| **Built (Session 10)** | `computer_use/skill.py` (cascade + three task methods); `computer_use/controllers.py` (LiveDesktop wrappers + pure helpers); `computer_use/drivers.py` (AXTextDriver, VisionDriver bounded loops); `computer_use/recorder.py` (TrajectoryRecorder); `run_task.py` (direct single-task runner); `prompts/computer_use.md`; `ComputerUseOutput` schema; `computer_use:` YAML block; dispatch branch in `skills.py`; unit test suite |
+| **Built (Session 10)** | `computer_use/skill.py` (cascade + three task methods); `computer_use/controllers.py` (LiveDesktop wrappers + pure helpers); `computer_use/drivers.py` (AXTextDriver, VisionDriver bounded loops); `computer_use/recorder.py` (TrajectoryRecorder); `run_task.py` (direct single-task runner); `prompts/computer_use.md`; `ComputerUseOutput` schema; `computer_use:` YAML block; dispatch branch in `S10code/skills.py`; unit test suite |
 | **Reused unchanged** | `llm_gatewayV9/` (port 8109, Anthropic provider, vision endpoint); `flow.py`, `recovery.py`, `persistence.py` (frozen orchestrator); `browser/client.py` `V9Client` (imported directly — not duplicated); all Session 9 skills and their prompts |

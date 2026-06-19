@@ -10,7 +10,6 @@ Two halves:
 from __future__ import annotations
 
 import json
-import re
 import time
 
 _OP_TOKENS = {"+": "add", "-": "subtract", "*": "multiply", "/": "divide", "=": "enter"}

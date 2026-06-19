@@ -38,6 +38,10 @@ class TrajectoryRecorder:
         self._steps.append(rec)
         return n
 
+    @property
+    def steps(self) -> list[dict]:
+        return list(self._steps)
+
     def note(self, message: str) -> None:
         self._notes.append(message)
 

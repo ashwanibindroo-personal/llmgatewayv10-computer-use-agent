@@ -26,12 +26,13 @@ constraints (vision, Electron debug-port, zero-vision).
 |---|---|---|
 | **Calculator** — compute an arithmetic expression, read result via clipboard | **hotkeys** (Layer 1 — zero LLM, zero vision) | **zero-vision** (`vision_calls == 0`) |
 | **VS Code** — open a scratch file in a temp folder, type content, save via the renderer DOM | **electron** (CDP over `--remote-debugging-port=9222`) | **Electron debug-port** |
-| **MS Paint** — open a blank canvas and draw a circle in the centre | **vision** (Layer 3 — screenshot + set-of-marks) | **vision (≥1 vision call)** |
+| **MS Paint** — open a blank canvas and draw a circle in the centre | **vision** (Layer 5 / last resort — screenshot + coordinate-based vision) | **vision (≥1 vision call)** |
 
 ### Constraint coverage (explicit)
 
-- **≥1 vision call** — MS Paint task; the `VisionDriver` sends one
-  `/v1/vision` request per turn; `trajectory.json` records `vision_calls > 0`.
+- **≥1 vision call** — MS Paint task; the `VisionDriver` sends a raw
+  screenshot and asks for pixel coordinates per turn (coordinate-based vision,
+  not set-of-marks annotation); `trajectory.json` records `vision_calls > 0`.
 - **≥1 Electron debug-port** — VS Code task; launched with
   `--remote-debugging-port=9222`; Playwright `connect_over_cdp` drives the
   renderer DOM.
@@ -51,21 +52,22 @@ is visible in the evidence.
 Layer 1 — hotkeys            pyautogui keystrokes + clipboard read
 Layer 2a — ax                pywinauto UIAutomation Invoke (no LLM)
 Layer 2b — ax_llm            AX tree serialised → numbered legend → V9Client.chat
-Electron  — CDP page         connect_over_cdp → renderer DOM (Playwright)
-Layer 3 — vision             mss screenshot → V9Client.vision (set-of-marks)
+Layer 3  — electron          connect_over_cdp → renderer DOM (Playwright)
+Layer 4  — vision            mss screenshot → V9Client.vision (coordinate-based)
 ```
 
 **Escalation rule:** stop at the first layer that completes the goal. Escalate
 when the current layer's locate/act step fails or returns an empty result. The
-Calculator task escalates from hotkeys to `ax_llm` only if the clipboard
-returns an empty string; it normally settles at hotkeys.
+Calculator task settles at the hotkeys layer; if the clipboard returns an empty
+string the run fails cleanly. An `ax_llm` fallback is a documented extension
+point (not implemented, since the hotkeys + clipboard path is deterministic).
 
 ### Where cascade evidence is recorded
 
 `trajectory.json` in every run directory contains:
 
 - `notes` — free-text log of every escalation decision (e.g.
-  `"tried hotkeys → no clipboard result → escalating to ax_llm"`).
+  `"tried hotkeys → no clipboard result → failing (ax_llm fallback is a documented extension point, not implemented)"`).
 - `layer_counts` — dict of `{layer_name: step_count}` for the run.
 - `vision_calls` — integer count of `/v1/vision` invocations; the zero-vision
   assertion checks this field.
@@ -155,9 +157,10 @@ S10code/state/sessions/direct/computer_use/calculator_1/
 
 S10code/state/sessions/direct/computer_use/paint_1/
   step_01.json
-  step_01_screen.png          # raw screenshot
-  step_01_marked.png          # annotated (vision steps only)
+  step_01_screen.png          # raw screenshot (coordinate-based vision; no set-of-marks)
   trajectory.json
+  # step_NN_marked.png is written only when a marked image is supplied
+  # (the recorder supports it; the current VisionDriver does not emit one)
 ```
 
 `trajectory.json` is the primary submission artifact: it contains the

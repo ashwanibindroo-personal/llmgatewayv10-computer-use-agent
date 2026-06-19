@@ -3,10 +3,11 @@ controllers and drivers. Same role browser/skill.py plays for the web:
 translate NodeSpec → AgentResult and own the layer cascade.
 
 Per-task cascade (cheapest viable layer first; escalate on insufficiency):
-  * calculator → Layer 1 hotkeys (zero LLM, zero vision); escalate to
-    ax_llm only if clipboard verification fails.
+  * calculator → Layer 1 hotkeys (zero LLM, zero vision); if clipboard
+    read returns empty the run fails cleanly (ax_llm is a documented
+    extension point, not implemented).
   * vscode     → Electron CDP 'page' layer over the debug port.
-  * paint      → forced Layer 3 vision (canvas has no AX labels).
+  * paint      → forced vision layer (canvas has no AX labels).
 """
 from __future__ import annotations
 
@@ -62,7 +63,7 @@ class ComputerUseSkill:
             return self._err(task, "controller_unavailable", str(e),
                              time.time() - t0)
 
-    # ── calculator: Layer 1 hotkeys, escalate to ax_llm on verify failure ──
+    # ── calculator: hotkeys (zero LLM, zero vision); fail cleanly if empty ──
     def _calculator(self, node, rec, t0) -> AgentResult:
         expr = node.metadata.get("expression", "1+1=")
         goal = node.metadata.get("goal", f"compute {expr}")
@@ -71,8 +72,9 @@ class ComputerUseSkill:
             rec.stop(result=result)
             return self._pack("calculator", "hotkeys", rec, result,
                               time.time() - t0)
-        # Escalate — hotkeys produced no readable result.
-        rec.note("tried hotkeys → no clipboard result → escalating to ax_llm")
+        # Hotkeys produced no readable result — fail cleanly.
+        rec.note("tried hotkeys → no clipboard result → failing "
+                 "(ax_llm fallback is a documented extension point, not implemented)")
         return self._err("calculator", "interaction_failed",
                          "hotkeys produced no result", time.time() - t0, rec=rec,
                          path="hotkeys")
@@ -120,9 +122,9 @@ class ComputerUseSkill:
         port = int(meta.get("port", 9222))
         udd = scratch / "udd"
         code_exe = meta.get("code_exe", "code")
-        subprocess.Popen([code_exe, f"--remote-debugging-port={port}",
-                          f"--user-data-dir={udd}", "-n", str(scratch)],
-                         shell=True)
+        cmd = (f'"{code_exe}" --remote-debugging-port={port} '
+               f'--user-data-dir="{udd}" -n "{scratch}"')
+        subprocess.Popen(cmd, shell=True)
         time.sleep(6.0)
         async with async_playwright() as p:
             browser = await p.chromium.connect_over_cdp(f"http://localhost:{port}")
@@ -145,7 +147,7 @@ class ComputerUseSkill:
                             f"saved {target}" if target.exists() else None,
                             "" if target.exists() else "save unverified")
 
-    # ── paint: forced Layer 3 vision ────────────────────────────────────────
+    # ── paint: forced vision layer (last resort) ────────────────────────────
     async def _paint(self, node, rec, t0) -> AgentResult:
         res = await self._run_vision(node.metadata.get("goal",
                 "Open a blank canvas in MS Paint and draw a circle in the centre"),
@@ -159,7 +161,7 @@ class ComputerUseSkill:
 
     async def _run_vision(self, goal: str, rec) -> DriverResult:
         """Live: open MS Paint, then drive the label-less canvas with the
-        vision set-of-marks driver."""
+        vision driver (raw screenshot + coordinate-based vision; no set-of-marks)."""
         import subprocess
         subprocess.Popen(["mspaint.exe"])
         time.sleep(2.0)
@@ -171,6 +173,7 @@ class ComputerUseSkill:
         out = ComputerUseOutput(
             task=task, path=path, turns=turns, result=result,
             trajectory_dir=str(rec.dir), vision_calls=rec.vision_calls,
+            actions=rec.steps,
         )
         return AgentResult(success=True, agent_name=self.NAME,
                            output=out.model_dump(), elapsed_s=elapsed)
